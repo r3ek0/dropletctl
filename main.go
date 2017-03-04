@@ -37,7 +37,6 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		session.listDroplets()
 		os.Exit(0)
 
 	case "delete":

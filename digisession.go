@@ -200,7 +200,7 @@ func (ds *DigiSession) CreateDroplets(params DropletParams) ([]godo.Droplet, err
 
 	fmt.Printf("%+v\n", params)
 	for c := 0; c < params.Count; c++ {
-		dropletName := fmt.Sprintf("%s-%02d", params.Name, c)
+		dropletName := fmt.Sprintf("%s-%02d", params.Name, c+1)
 		createRequest := &godo.DropletCreateRequest{
 			Name:   dropletName,
 			Region: params.Region,
