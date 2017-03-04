@@ -101,7 +101,8 @@ func main() {
 		os.Exit(0)
 
 	default:
-		os.Exit(0)
+		printBasicHelp()
+		os.Exit(1)
 
 	}
 }
