@@ -6,7 +6,21 @@ import (
 	"os"
 )
 
+type DropletParams struct {
+	Count      int
+	Region     string
+	Name       string
+	Size       string
+	Image      string
+	SSHKeyName string
+}
+
 func main() {
+
+	if len(os.Args) < 2 {
+		printBasicHelp()
+		os.Exit(1)
+	}
 
 	createDropletFlags := flag.NewFlagSet("Flags for create droplet", flag.ExitOnError)
 	var dropletparams DropletParams
@@ -19,8 +33,8 @@ func main() {
 	createDropletFlags.StringVar(&dropletparams.Image, "-image", "ubuntu-16-04-x64", "Name of the image to use.")
 	createDropletFlags.StringVar(&dropletparams.Image, "i", "ubuntu-16-04-x64", "Name of the image to use.")
 
-	createDropletFlags.StringVar(&dropletparams.SSHKeyFP, "-key", "none", "FP of the sshkey to use.")
-	createDropletFlags.StringVar(&dropletparams.SSHKeyFP, "k", "none", "FP of the sshkey to use.")
+	createDropletFlags.StringVar(&dropletparams.SSHKeyName, "-key", "none", "Name of the sshkey to use.")
+	createDropletFlags.StringVar(&dropletparams.SSHKeyName, "k", "none", "Name of the sshkey to use.")
 
 	createDropletFlags.StringVar(&dropletparams.Size, "-size", "512mb", "Size of the droplet (512mb, 1gb, 2gb...)")
 	createDropletFlags.StringVar(&dropletparams.Size, "s", "512mb", "Size of the droplet (512mb, 1gb, 2gb...)")
@@ -30,17 +44,38 @@ func main() {
 
 	switch os.Args[1] {
 	case "create":
-		fmt.Println("Create droplets")
-		createDropletFlags.Parse(os.Args[3:])
-		session := NewDigiSession()
-		_, err := session.CreateDroplets(dropletparams)
-		if err != nil {
-			panic(err)
+		if len(os.Args) < 3 {
+			printCreateHelp()
+			os.Exit(1)
+		}
+
+		if stringInSlice(os.Args[2], []string{"droplet", "droplets"}) {
+			fmt.Println("Create droplets")
+			if len(os.Args) < 4 {
+				printCreateDropletHelp()
+				os.Exit(1)
+			}
+			createDropletFlags.Parse(os.Args[3:])
+			session := NewDigiSession()
+			_, err := session.CreateDroplets(dropletparams)
+			if err != nil {
+				fmt.Println(err)
+				os.Exit(1)
+			}
 		}
 		os.Exit(0)
 
 	case "delete":
-		if os.Args[2] == "droplet" {
+		if len(os.Args) < 3 {
+			printDeleteDropletHelp()
+			os.Exit(1)
+		}
+
+		if stringInSlice(os.Args[2], []string{"droplet", "droplets"}) {
+			if len(os.Args) < 4 {
+				printDeleteDropletHelp()
+				os.Exit(1)
+			}
 			name := os.Args[3]
 			session := NewDigiSession()
 			err := session.DeleteDroplet(name)
@@ -52,12 +87,16 @@ func main() {
 		os.Exit(0)
 
 	case "list":
-		if os.Args[2] == "keys" {
+		if len(os.Args) < 3 {
+			printListHelp()
+			os.Exit(1)
+		}
+		if stringInSlice(os.Args[2], []string{"keys", "sshkeys"}) {
 			session := NewDigiSession()
 			session.ListSSHKeys()
-		} else if os.Args[2] == "droplets" {
+		} else if stringInSlice(os.Args[2], []string{"droplet", "droplets"}) {
 			session := NewDigiSession()
-			session.listDroplets()
+			session.ListDroplets()
 		}
 		os.Exit(0)
 

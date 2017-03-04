@@ -9,31 +9,14 @@ import (
 )
 
 type DigiSession struct {
-	Client        godo.Client
-	DefaultSSHKey *godo.Key
-}
-
-type SSHKeyParams struct {
-	Name string
-	FP   string
-	Key  string
-}
-
-type DropletParams struct {
-	Count    int
-	Region   string
-	Name     string
-	Size     string
-	Image    string
-	SSHKeyFP string
+	Client godo.Client
 }
 
 func NewDigiSession() *DigiSession {
 	oauthClient := NewOAuthClient()
 	client := godo.NewClient(oauthClient)
 	session := &DigiSession{
-		Client:        *client,
-		DefaultSSHKey: nil,
+		Client: *client,
 	}
 	return session
 }
@@ -47,7 +30,7 @@ func (ds *DigiSession) DeleteDroplet(rm_droplet string) error {
 		return errors.New("Droplet not found.")
 	}
 
-	fmt.Printf("delete droplet: %8d - %16s %s ", droplet.ID, droplet.Name, droplet.SizeSlug)
+	fmt.Printf("delete droplet: %8d - %s %s ", droplet.ID, droplet.Name, droplet.SizeSlug)
 	_, err = ds.Client.Droplets.Delete(context.TODO(), droplet.ID)
 	if err != nil {
 		fmt.Printf(" [error]\n")
@@ -69,15 +52,6 @@ func (ds *DigiSession) GetDropletByName(name string) (*godo.Droplet, error) {
 		}
 	}
 	return nil, errors.New(fmt.Sprintf("No droplet with name '%s' found.", name))
-}
-
-func (ds *DigiSession) SetDefaultSSHKey(name string) error {
-	key, err := ds.GetSSHKeyByName(name)
-	if err != nil {
-		return err
-	}
-	ds.DefaultSSHKey = key
-	return nil
 }
 
 func (ds *DigiSession) GetSSHKeyByName(name string) (*godo.Key, error) {
@@ -109,18 +83,36 @@ func (ds *DigiSession) ListSSHKeys() error {
 }
 
 func (ds *DigiSession) SSHKeyList() ([]godo.Key, error) {
-	var listopts godo.ListOptions
-	listopts.Page = 1
-	listopts.PerPage = 10
-
+	opts := &godo.ListOptions{}
+	list := []godo.Key{}
 	ctx := context.TODO()
 
-	sshkeys, _, err := ds.Client.Keys.List(ctx, &listopts)
-	if err != nil {
-		return nil, err
+	for {
+		sshkeys, resp, err := ds.Client.Keys.List(ctx, opts)
+		if err != nil {
+			return nil, err
+		}
+
+		// append the current page's droplets to our list
+		for _, d := range sshkeys {
+			list = append(list, d)
+		}
+
+		// if we are at the last page, break out the for loop
+		if resp.Links == nil || resp.Links.IsLastPage() {
+			break
+		}
+
+		page, err := resp.Links.CurrentPage()
+		if err != nil {
+			return nil, err
+		}
+
+		// set the page we want for the next request
+		opts.Page = page + 1
 	}
 
-	return sshkeys, nil
+	return list, nil
 }
 
 func (ds *DigiSession) DropletList() ([]godo.Droplet, error) {
@@ -159,36 +151,36 @@ func (ds *DigiSession) DropletList() ([]godo.Droplet, error) {
 	return list, nil
 }
 
-func (ds *DigiSession) listDroplets() {
+func (ds *DigiSession) ListDroplets() error {
 	list, err := ds.DropletList()
 	if err != nil {
-		panic(err)
+		return err
 	}
 	for _, droplet := range list {
-		status := " "
-		if droplet.Status == "active" {
-			status = "X"
-		}
-
-		fmt.Printf("(%s) %-20s %4s %5s %2dcpu %10s ip: %s\n",
-			status,
+		fmt.Printf("(%6s) %-15s %4s %5s %2dcpu %10s %s\n",
+			droplet.Status,
 			droplet.Name,
 			droplet.Region.Slug,
 			droplet.SizeSlug,
 			droplet.Vcpus,
-			droplet.Image.Distribution+"-"+droplet.Image.Name,
+			droplet.Image.Slug,
 			droplet.Networks.V4[0].IPAddress,
 		)
 	}
-	return
+	return nil
 }
-
 func (ds *DigiSession) CreateDroplets(params DropletParams) ([]godo.Droplet, error) {
-
+	for c := 0; c < params.Count; c++ {
+		dropletName := fmt.Sprintf("%s-%02d", params.Name, c+1)
+		_, found := ds.GetDropletByName(dropletName)
+		if found == nil {
+			return nil, errors.New("A droplet with name '" + dropletName + "' already exists.\nAbort.")
+		}
+	}
 	var droplets []godo.Droplet
 	var sshkeys []godo.DropletCreateSSHKey
 
-	key, err := ds.GetSSHKeyByName(params.SSHKeyFP)
+	key, err := ds.GetSSHKeyByName(params.SSHKeyName)
 	if err != nil {
 		return nil, err
 	}
@@ -198,7 +190,7 @@ func (ds *DigiSession) CreateDroplets(params DropletParams) ([]godo.Droplet, err
 	}
 	sshkeys = append(sshkeys, *sshkey)
 
-	fmt.Printf("%+v\n", params)
+	fmt.Printf("Params: %+v\n", params)
 	for c := 0; c < params.Count; c++ {
 		dropletName := fmt.Sprintf("%s-%02d", params.Name, c+1)
 		createRequest := &godo.DropletCreateRequest{
@@ -216,6 +208,18 @@ func (ds *DigiSession) CreateDroplets(params DropletParams) ([]godo.Droplet, err
 			return nil, err
 		}
 		droplets = append(droplets, *newDroplet)
+
+	}
+	for _, droplet := range droplets {
+		fmt.Printf("(%6s) %-15s %4s %5s %dcpu %15s\n",
+			droplet.Status,
+			droplet.Name,
+			droplet.Region.Slug,
+			droplet.SizeSlug,
+			droplet.Vcpus,
+			droplet.Image.Slug,
+		)
+
 	}
 	return droplets, nil
 }
