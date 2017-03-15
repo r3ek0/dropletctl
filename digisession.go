@@ -82,6 +82,36 @@ func (ds *DigiSession) ListSSHKeys() error {
 
 }
 
+func (ds *DigiSession) CreateSSHKey(sshkeyparams SSHKeyParams) (*godo.Key, error) {
+	ctx := context.TODO()
+	req := &godo.KeyCreateRequest{
+		Name:      sshkeyparams.SSHKeyName,
+		PublicKey: sshkeyparams.SSHKey,
+	}
+	key, _, err := ds.Client.Keys.Create(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return key, nil
+}
+
+func (ds *DigiSession) DeleteSSHKey(name string) (*godo.Key, error) {
+	keylist, err := ds.SSHKeyList()
+	if err != nil {
+		return nil, err
+	}
+	for _, key := range keylist {
+		if key.Name == name {
+			_, err := ds.Client.Keys.DeleteByFingerprint(context.TODO(), key.Fingerprint)
+			if err != nil {
+				return nil, err
+			}
+			return &key, nil
+		}
+	}
+	return nil, errors.New("No such key.")
+}
+
 func (ds *DigiSession) SSHKeyList() ([]godo.Key, error) {
 	opts := &godo.ListOptions{}
 	list := []godo.Key{}
